@@ -1,0 +1,10 @@
+{
+  "name": "Maximized Into Empty Workspace (Gnome 49+)",
+  "description": "New and maximized windows will be moved to empty workspaces.\nSupports multiple monitors. Compatible with Gnome 49+.",
+  "url":"https://github.com/kyledross/gnome-shell-extension-maximize-to-empty-workspace",
+  "uuid": "MaximizeToEmptyWorkspace-gnome49@kyleross.com",
+  "shell-version": [
+    "49"
+  ],
+  "version": 1
+}

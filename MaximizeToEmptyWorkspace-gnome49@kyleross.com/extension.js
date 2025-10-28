@@ -218,7 +218,8 @@ export default class Extension {
         //console.log("achim","window_manager_map "+win.get_id());
         if (win.window_type !== Meta.WindowType.NORMAL)
             return;
-        if (win.get_maximized() !== Meta.MaximizeFlags.BOTH)
+        const isMaximized = win.maximized_horizontally && win.maximized_vertically;
+        if (!isMaximized)
             return;
         if (win.is_always_on_all_workspaces())
             return;
@@ -245,7 +246,8 @@ export default class Extension {
         if (change === Meta.SizeChange.MAXIMIZE)
             {
             //console.log("achim","Meta.SizeChange.MAXIMIZE");
-            if (win.get_maximized() === Meta.MaximizeFlags.BOTH)
+            const isMaximized = win.maximized_horizontally && win.maximized_vertically;
+            if (isMaximized)
                 {
                 //console.log("achim","=== Meta.MaximizeFlags.BOTH");
                 _windowids_size_change[win.get_id()]="place";
@@ -270,7 +272,8 @@ export default class Extension {
         else if (change === Meta.SizeChange.UNFULLSCREEN)
             {
             //console.log("achim","change === Meta.SizeChange.UNFULLSCREEN");
-            if (win.get_maximized() !== Meta.MaximizeFlags.BOTH)
+            const isMaximized = win.maximized_horizontally && win.maximized_vertically;
+            if (!isMaximized)
                 {
                 //console.log("achim","!== Meta.MaximizeFlags.BOTH");
                 _windowids_size_change[win.get_id()]="back";
@@ -295,7 +298,8 @@ export default class Extension {
         //console.log("achim","window_manager_umminimize");
         if (win.window_type !== Meta.WindowType.NORMAL)
             return;
-        if (win.get_maximized() !== Meta.MaximizeFlags.BOTH)
+        const isMaximized = win.maximized_horizontally && win.maximized_vertically;
+        if (!isMaximized)
             return;
         if (win.is_always_on_all_workspaces())
             return;
