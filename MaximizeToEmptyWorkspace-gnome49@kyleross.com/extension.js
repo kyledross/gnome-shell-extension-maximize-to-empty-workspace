@@ -17,13 +17,15 @@
  */
 import Meta from 'gi://Meta';
 import Gio from 'gi://Gio';
-//  _mutterSettings.get_boolean('workspaces-only-on-primary');
-//  _mutterSettings.get_boolean('dynamic-workspaces');
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const _handles = [];
 
 const _windowids_maximized = {};
 const _windowids_size_change = {};
+const _windowids_pending_startup = {};
+const _windowids_pending_overview = {};
+let _startupComplete = false;
 
 export default class Extension {
  
@@ -61,7 +63,11 @@ export default class Extension {
     }
     
     placeOnWorkspace(win) {
-        //console.log("achim","placeOnWorkspace:"+win.get_id());
+        // Don't reorder workspaces if overview is visible (prevents triggering overview at login)
+        if (Main.overview.visible) {
+            _windowids_pending_overview[win.get_id()] = win;
+            return;
+        }
         // bMap true - new windows to end of workspaces
         const bMap = false;
 
@@ -96,11 +102,6 @@ export default class Extension {
                         }
                     else
                         {
-                        // alternative, works too
-                        //win.change_workspace_by_index(firstfree, false);
-                        //manager.reorder_workspace(manager.get_workspace_by_index(firstfree),current+1);
-                        //manager.get_workspace_by_index(current+1).activate(global.get_current_time());
-                        
                         // insert existing window on next monitor (each other workspace is moved one index further)
                         manager.reorder_workspace(manager.get_workspace_by_index(firstfree),current);
                         // move the other windows to their old places
@@ -157,8 +158,8 @@ export default class Extension {
 
     // back to last workspace
     backto(win) {
-
-        //console.log("achim","backto "+win.get_id());
+        if (!_startupComplete)
+            return;
         
         // Idea: don't move the coresponding window to an other workspace (it may be not fully active yet)
         // Reorder the workspaces and move all other window
@@ -187,7 +188,6 @@ export default class Extension {
                     return;
                 const lastocupied=this.getLastOcupiedMonitor(manager,current,mMonitor);
                 // No occupied monitor: do nothing
-                //log("lastocupied "+ lastocupied);
                 if (lastocupied==-1)
                     return;
                 const wListlastoccupied = manager.get_workspace_by_index(lastocupied).list_windows().filter(w => w!==win && !w.is_always_on_all_workspaces() && w.get_monitor()==mMonitor);
@@ -215,7 +215,6 @@ export default class Extension {
     window_manager_map(act)
     {
         const win = act.meta_window;
-        //console.log("achim","window_manager_map "+win.get_id());
         if (win.window_type !== Meta.WindowType.NORMAL)
             return;
         const isMaximized = win.maximized_horizontally && win.maximized_vertically;
@@ -223,13 +222,16 @@ export default class Extension {
             return;
         if (win.is_always_on_all_workspaces())
             return;
+        if (!_startupComplete) {
+            _windowids_pending_startup[win.get_id()] = win;
+            return;
+        }
         this.placeOnWorkspace(win);
     }
     
     window_manager_destroy(act)
     {
         const win = act.meta_window;
-        //console.log("achim","window_manager_destroy");
         if (win.window_type !== Meta.WindowType.NORMAL)
             return;
         this.backto(win);
@@ -238,44 +240,38 @@ export default class Extension {
     window_manager_size_change(act,change,rectold) 
     {
         const win = act.meta_window;
-        //console.log("achim","window_manager_size_change "+win.get_id());
         if (win.window_type !== Meta.WindowType.NORMAL)
+            return;
+        if (!_startupComplete)
             return;
         if (win.is_always_on_all_workspaces())
             return;
         if (change === Meta.SizeChange.MAXIMIZE)
             {
-            //console.log("achim","Meta.SizeChange.MAXIMIZE");
             const isMaximized = win.maximized_horizontally && win.maximized_vertically;
             if (isMaximized)
                 {
-                //console.log("achim","=== Meta.MaximizeFlags.BOTH");
                 _windowids_size_change[win.get_id()]="place";
                 }
             }
         else if (change  === Meta.SizeChange.FULLSCREEN)
             {
-            //console.log("achim","Meta.SizeChange.FULLSCREEN");
                 _windowids_size_change[win.get_id()]="place";
             }
         else if (change === Meta.SizeChange.UNMAXIMIZE)
             {
-            //console.log("achim","Meta.SizeChange.UNMAXIMIZE");
             // do nothing if it was only partially maximized
             const rectmax=win.get_work_area_for_monitor(win.get_monitor());     
             if (rectmax.equal(rectold))
                 {
-                //console.log("achim","rectmax matches");
                 _windowids_size_change[win.get_id()]="back";
                 }
             }
         else if (change === Meta.SizeChange.UNFULLSCREEN)
             {
-            //console.log("achim","change === Meta.SizeChange.UNFULLSCREEN");
             const isMaximized = win.maximized_horizontally && win.maximized_vertically;
             if (!isMaximized)
                 {
-                //console.log("achim","!== Meta.MaximizeFlags.BOTH");
                 _windowids_size_change[win.get_id()]="back";
                 }
             }
@@ -284,7 +280,6 @@ export default class Extension {
     window_manager_minimize(act)
     {
         const win = act.meta_window;
-        //console.log("achim","window_manager_minimize");
         if (win.window_type !== Meta.WindowType.NORMAL)
             return;
         if (win.is_always_on_all_workspaces())
@@ -295,8 +290,9 @@ export default class Extension {
     window_manager_unminimize(act)
     {
         const win = act.meta_window;
-        //console.log("achim","window_manager_umminimize");
         if (win.window_type !== Meta.WindowType.NORMAL)
+            return;
+        if (!_startupComplete)
             return;
         const isMaximized = win.maximized_horizontally && win.maximized_vertically;
         if (!isMaximized)
@@ -309,11 +305,11 @@ export default class Extension {
     window_manager_size_changed(act)
     {
         const win = act.meta_window;
-        //console.log("achim","window_manager_size_changed "+win.get_id());
-        if (win.get_id() in _windowids_size_change) {
-            if (_windowids_size_change[win.get_id()]=="place") {                
+        const action = _windowids_size_change[win.get_id()];
+        if (action) {
+            if (action == "place") {
                 this.placeOnWorkspace(win);
-            } else if (_windowids_size_change[win.get_id()]=="back") {                
+            } else if (action == "back") {
                 this.backto(win);
             }
             delete _windowids_size_change[win.get_id()];
@@ -322,11 +318,46 @@ export default class Extension {
 
     window_manager_switch_workspace()
     {
-        // console.log("achim","window_manager_switch_workspace");
     }
 
     enable() {
         this._mutterSettings = new Gio.Settings({ schema_id: 'org.gnome.mutter' });
+        _startupComplete = false;
+        // Delay extension activation to prevent workspace reordering during session startup
+        this._startupTimeoutId = setTimeout(() => {
+            _startupComplete = true;
+            this._startupTimeoutId = null;
+            // Process any windows that arrived during startup
+            for (const winId in _windowids_pending_startup) {
+                const win = _windowids_pending_startup[winId];
+                if (win && !win.is_always_on_all_workspaces()) {
+                    const isMaximized = win.maximized_horizontally && win.maximized_vertically;
+                    if (isMaximized) {
+                        this.placeOnWorkspace(win);
+                    }
+                }
+            }
+            // Clear the pending list
+            for (const winId in _windowids_pending_startup) {
+                delete _windowids_pending_startup[winId];
+            }
+        }, 10000);
+        // Listen for overview hidden to process pending windows
+        _handles.push(Main.overview.connect('hidden', () => {
+            for (const winId in _windowids_pending_overview) {
+                const win = _windowids_pending_overview[winId];
+                if (win && !win.is_always_on_all_workspaces()) {
+                    const isMaximized = win.maximized_horizontally && win.maximized_vertically;
+                    if (isMaximized) {
+                        this.placeOnWorkspace(win);
+                    }
+                }
+            }
+            // Clear the pending list
+            for (const winId in _windowids_pending_overview) {
+                delete _windowids_pending_overview[winId];
+            }
+        }));
         // Trigger new window with maximize size and if the window is maximized
         _handles.push(global.window_manager.connect('minimize', (_, act) => {this.window_manager_minimize(act);}));
         _handles.push(global.window_manager.connect('unminimize', (_, act) => {this.window_manager_unminimize(act);}));
@@ -338,9 +369,20 @@ export default class Extension {
     }
 
     disable() {
-        // remove array and disconect
-        _handles.splice(0).forEach(h => global.window_manager.disconnect(h));
+        // remove array and disconnect
+        _handles.splice(0).forEach(h => {
+            try {
+                global.window_manager.disconnect(h);
+            } catch (e) {
+                Main.overview.disconnect(h);
+            }
+        });
         
+        if (this._startupTimeoutId) {
+            clearTimeout(this._startupTimeoutId);
+            this._startupTimeoutId = null;
+        }
+        _startupComplete = false;
         this._mutterSettings = null;
     }
 }
