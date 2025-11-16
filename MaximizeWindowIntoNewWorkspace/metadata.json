@@ -1,0 +1,10 @@
+{
+  "name": "Maximize Window Into New Workspace",
+  "description": "New and maximized windows will be moved to empty workspaces.\nThis is a fork of https://github.com/balintbarna/gnome-shell-extension-maximize-to-empty-workspace.",
+  "url":"https://github.com/kyledross/gnome-shell-extension-maximize-to-empty-workspace",
+  "uuid": "MaximizeWindowIntoNewWorkspace@kyleross.com",
+  "shell-version": [
+    "49"
+  ],
+  "version": 1
+}

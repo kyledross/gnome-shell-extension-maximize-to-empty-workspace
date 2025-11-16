@@ -1,6 +1,6 @@
 #!/bin/sh
 
-NAME=MaximizeToEmptyWorkspace-gnome49@kyleross.com
+NAME=MaximizeWindowIntoNewWorkspace
 cd $NAME
 zip -r $NAME.zip *
 mv $NAME.zip ../..
