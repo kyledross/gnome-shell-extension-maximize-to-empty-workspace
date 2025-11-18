@@ -19,8 +19,6 @@ import Meta from 'gi://Meta';
 import Gio from 'gi://Gio';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-const _handles = [];
-
 const _windowidsMaximized = {};
 const _windowidsSizeChange = {};
 const _windowidsPendingStartup = {};
@@ -314,7 +312,7 @@ export default class Extension {
                 delete _windowidsPendingStartup[winId];
         }, 10000);
         // Listen for overview hidden to process pending windows
-        _handles.push(Main.overview.connect('hidden', () => {
+        Main.overview.connectObject('hidden', () => {
             for (const winId in _windowidsPendingOverview) {
                 const win = _windowidsPendingOverview[winId];
                 if (win && !win.is_always_on_all_workspaces()) {
@@ -326,40 +324,37 @@ export default class Extension {
             // Clear the pending list
             for (const winId in _windowidsPendingOverview)
                 delete _windowidsPendingOverview[winId];
-        }));
+        }, this);
         // Trigger new window with maximize size and if the window is maximized
-        _handles.push(global.window_manager.connect('minimize', (_, act) => {
-            this.window_manager_minimize(act);
-        }));
-        _handles.push(global.window_manager.connect('unminimize', (_, act) => {
-            this.window_manager_unminimize(act);
-        }));
-        _handles.push(global.window_manager.connect('size-changed', (_, act) => {
-            this.window_manager_size_changed(act);
-        }));
-        _handles.push(global.window_manager.connect('switch-workspace', _ => {
-            this.window_manager_switch_workspace();
-        }));
-        _handles.push(global.window_manager.connect('map', (_, act) => {
-            this.window_manager_map(act);
-        }));
-        _handles.push(global.window_manager.connect('destroy', (_, act) => {
-            this.window_manager_destroy(act);
-        }));
-        _handles.push(global.window_manager.connect('size-change', (_, act, change, rectold) => {
-            this.window_manager_size_change(act, change, rectold);
-        }));
+        global.window_manager.connectObject(
+            'minimize', (_, act) => {
+                this.window_manager_minimize(act);
+            },
+            'unminimize', (_, act) => {
+                this.window_manager_unminimize(act);
+            },
+            'size-changed', (_, act) => {
+                this.window_manager_size_changed(act);
+            },
+            'switch-workspace', _ => {
+                this.window_manager_switch_workspace();
+            },
+            'map', (_, act) => {
+                this.window_manager_map(act);
+            },
+            'destroy', (_, act) => {
+                this.window_manager_destroy(act);
+            },
+            'size-change', (_, act, change, rectold) => {
+                this.window_manager_size_change(act, change, rectold);
+            },
+            this
+        );
     }
 
     disable() {
-        // remove array and disconnect
-        _handles.splice(0).forEach(h => {
-            try {
-                global.window_manager.disconnect(h);
-            } catch {
-                Main.overview.disconnect(h);
-            }
-        });
+        Main.overview.disconnectObject(this);
+        global.window_manager.disconnectObject(this);
 
         if (this._startupTimeoutId) {
             clearTimeout(this._startupTimeoutId);
