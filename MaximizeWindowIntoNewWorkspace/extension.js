@@ -353,13 +353,14 @@ export default class Extension {
     }
 
     disable() {
-        Main.overview.disconnectObject(this);
-        global.window_manager.disconnectObject(this);
-
         if (this._startupTimeoutId) {
             clearTimeout(this._startupTimeoutId);
             this._startupTimeoutId = null;
         }
+
+        Main.overview.disconnectObject(this);
+        global.window_manager.disconnectObject(this);
+
         _startupComplete = false;
         this._mutterSettings = null;
     }
