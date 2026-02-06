@@ -23,6 +23,7 @@ const _windowidsMaximized = {};
 const _windowidsSizeChange = {};
 const _windowidsPendingStartup = {};
 const _windowidsPendingOverview = {};
+const _windowidsPendingStability = {};
 let _startupComplete = false;
 
 export default class Extension {
@@ -59,6 +60,9 @@ export default class Extension {
             _windowidsPendingOverview[win.get_id()] = win;
             return;
         }
+        // Filter out transient/hidden windows
+        if (win.skip_taskbar || !win.showing_on_its_workspace() || win.get_transient_for())
+            return;
         // bMap true - new windows to end of workspaces
         const bMap = false;
 
@@ -212,11 +216,23 @@ export default class Extension {
             return;
         if (win.is_always_on_all_workspaces())
             return;
+        // Filter out transient/hidden windows immediately
+        if (win.skip_taskbar || win.get_transient_for())
+            return;
         if (!_startupComplete) {
             _windowidsPendingStartup[win.get_id()] = win;
             return;
         }
-        this.placeOnWorkspace(win);
+        // Add stability delay to filter out short-lived windows
+        _windowidsPendingStability[win.get_id()] = setTimeout(() => {
+            delete _windowidsPendingStability[win.get_id()];
+            // Verify window is still valid, maximized, visible, and not transient
+            if (win && !win.is_always_on_all_workspaces()) {
+                const stillMaximized = win.maximized_horizontally && win.maximized_vertically;
+                if (stillMaximized && win.showing_on_its_workspace() && !win.skip_taskbar && !win.get_transient_for())
+                    this.placeOnWorkspace(win);
+            }
+        }, 500);
     }
 
     window_manager_destroy(act) {
@@ -272,6 +288,9 @@ export default class Extension {
             return;
         if (win.is_always_on_all_workspaces())
             return;
+        // Filter out transient/hidden windows
+        if (win.skip_taskbar || win.get_transient_for())
+            return;
         this.placeOnWorkspace(win);
     }
 
@@ -279,10 +298,13 @@ export default class Extension {
         const win = act.meta_window;
         const action = _windowidsSizeChange[win.get_id()];
         if (action) {
-            if (action === 'place')
-                this.placeOnWorkspace(win);
-            else if (action === 'back')
+            if (action === 'place') {
+                // Filter out transient/hidden windows
+                if (!win.skip_taskbar && !win.get_transient_for())
+                    this.placeOnWorkspace(win);
+            } else if (action === 'back') {
                 this.backto(win);
+            }
 
             delete _windowidsSizeChange[win.get_id()];
         }
@@ -303,7 +325,8 @@ export default class Extension {
                 const win = _windowidsPendingStartup[winId];
                 if (win && !win.is_always_on_all_workspaces()) {
                     const isMaximized = win.maximized_horizontally && win.maximized_vertically;
-                    if (isMaximized)
+                    // Filter out transient/hidden windows
+                    if (isMaximized && win.showing_on_its_workspace() && !win.skip_taskbar && !win.get_transient_for())
                         this.placeOnWorkspace(win);
                 }
             }
@@ -317,7 +340,8 @@ export default class Extension {
                 const win = _windowidsPendingOverview[winId];
                 if (win && !win.is_always_on_all_workspaces()) {
                     const isMaximized = win.maximized_horizontally && win.maximized_vertically;
-                    if (isMaximized)
+                    // Filter out transient/hidden windows
+                    if (isMaximized && win.showing_on_its_workspace() && !win.skip_taskbar && !win.get_transient_for())
                         this.placeOnWorkspace(win);
                 }
             }
@@ -356,6 +380,12 @@ export default class Extension {
         if (this._startupTimeoutId) {
             clearTimeout(this._startupTimeoutId);
             this._startupTimeoutId = null;
+        }
+
+        // Clear any pending stability timeouts
+        for (const winId in _windowidsPendingStability) {
+            clearTimeout(_windowidsPendingStability[winId]);
+            delete _windowidsPendingStability[winId];
         }
 
         Main.overview.disconnectObject(this);
